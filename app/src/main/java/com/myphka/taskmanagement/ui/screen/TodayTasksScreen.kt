@@ -44,7 +44,9 @@ import com.myphka.taskmanagement.ui.theme.BackgroundLavender
 import com.myphka.taskmanagement.ui.theme.NeutralGray
 import com.myphka.taskmanagement.ui.theme.PrimaryBrand
 import com.myphka.taskmanagement.ui.theme.TextDark
-import com.myphka.taskmanagement.viewmodel.TaskManagementViewModel
+import com.myphka.taskmanagement.presenter.TodayTasksPresenter
+import com.myphka.taskmanagement.presenter.TodayTasksView
+import com.myphka.taskmanagement.presenter.TodayTasksPresenterImpl
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -52,28 +54,39 @@ import androidx.compose.runtime.LaunchedEffect
 import android.util.Log
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import com.myphka.taskmanagement.model.Task
 import com.myphka.taskmanagement.model.TaskStatus
+import com.myphka.taskmanagement.model.Project
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import java.time.LocalDate
 
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun TodayTasksScreen(
-    viewModel: TaskManagementViewModel,
+    presenter: TodayTasksPresenter,
     onNavigateToAddProject: () -> Unit = {},
     onAddTask: () -> Unit,
     onScreenVisible: () -> Unit = {}
 ) {
+    val view = remember { TodayTasksViewImpl(presenter, onNavigateToAddProject) }
+
+    // Attach view to presenter
+    LaunchedEffect(presenter) {
+        presenter.attachView(view)
+        presenter.onViewCreated()
+    }
+
     // Call onScreenVisible when screen becomes visible
     androidx.compose.runtime.LaunchedEffect(Unit) {
         onScreenVisible()
     }
-    
-    val uiState by viewModel.uiState.collectAsState()
 
     val listState = rememberLazyListState()
 
     // Debug logging
-    Log.d("TodayTasksScreen", "Screen recomposed | Filter: ${uiState.selectedFilter} | Date: ${uiState.selectedDate} | Total tasks: ${uiState.tasks.size}")
+    Log.d("TodayTasksScreen", "Screen recomposed | Filter: ${view.selectedFilter} | Date: ${view.selectedDate} | Total tasks: ${view.tasks.size}")
 
     Scaffold(
         modifier = Modifier
@@ -81,7 +94,7 @@ fun TodayTasksScreen(
             .background(BackgroundLavender),
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onNavigateToAddProject, containerColor = PrimaryBrand,
+                onClick = { presenter.onAddProjectClicked() }, containerColor = PrimaryBrand,
                 shape = CircleShape
             ) {
                 Icon(
@@ -94,7 +107,7 @@ fun TodayTasksScreen(
         }, floatingActionButtonPosition = FabPosition.Center,
         bottomBar = {
             BottomNavigationBar(
-                onNavigateToAddProject = onNavigateToAddProject
+                onNavigateToAddProject = { presenter.onAddProjectClicked() }
             )
         }
     ) { innerPadding ->
@@ -116,9 +129,9 @@ fun TodayTasksScreen(
 
             // Date Selector
             DateSelector(
-                selectedDate = uiState.selectedDate,
+                selectedDate = view.selectedDate,
                 onDateSelected = { date ->
-                    viewModel.selectDate(date)
+                    presenter.onDateSelected(date)
                 }
             )
 
@@ -133,35 +146,35 @@ fun TodayTasksScreen(
                 FilterTab(
                     modifier = Modifier.weight(1f),
                     label = "All",
-                    isSelected = uiState.selectedFilter == TaskFilterType.ALL,
-                    onClick = { viewModel.selectFilter(TaskFilterType.ALL) }
+                    isSelected = view.selectedFilter == TaskFilterType.ALL,
+                    onClick = { presenter.onFilterSelected(TaskFilterType.ALL) }
                 )
                 FilterTab(
                     modifier = Modifier.weight(1f),
                     label = "To Do",
-                    isSelected = uiState.selectedFilter == TaskFilterType.TODO,
-                    onClick = { viewModel.selectFilter(TaskFilterType.TODO) }
+                    isSelected = view.selectedFilter == TaskFilterType.TODO,
+                    onClick = { presenter.onFilterSelected(TaskFilterType.TODO) }
                 )
                 FilterTab(
                     modifier = Modifier.weight(1f),
                     label = "In Progress",
-                    isSelected = uiState.selectedFilter == TaskFilterType.IN_PROGRESS,
-                    onClick = { viewModel.selectFilter(TaskFilterType.IN_PROGRESS) }
+                    isSelected = view.selectedFilter == TaskFilterType.IN_PROGRESS,
+                    onClick = { presenter.onFilterSelected(TaskFilterType.IN_PROGRESS) }
                 )
                 FilterTab(
                     modifier = Modifier.weight(1f),
                     label = "Done",
-                    isSelected = uiState.selectedFilter == TaskFilterType.DONE,
-                    onClick = { viewModel.selectFilter(TaskFilterType.DONE) }
+                    isSelected = view.selectedFilter == TaskFilterType.DONE,
+                    onClick = { presenter.onFilterSelected(TaskFilterType.DONE) }
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Tasks List - directly filter from uiState, ensuring reactivity
-            val filteredTasks = remember(uiState.tasks, uiState.selectedDate, uiState.selectedFilter) {
-                uiState.tasks.filter { task ->
-                    task.date == uiState.selectedDate && when (uiState.selectedFilter) {
+            // Tasks List
+            val filteredTasks = remember(view.tasks, view.selectedDate, view.selectedFilter) {
+                view.tasks.filter { task ->
+                    task.date == view.selectedDate && when (view.selectedFilter) {
                         TaskFilterType.ALL -> true
                         TaskFilterType.TODO -> task.status == TaskStatus.TODO
                         TaskFilterType.IN_PROGRESS -> task.status == TaskStatus.IN_PROGRESS
@@ -178,8 +191,8 @@ fun TodayTasksScreen(
             }
 
             Log.d("TodayTasksScreen", "Rendering ${filteredTasks.size} tasks in LazyColumn")
-            Log.d("TodayTasksScreen", "All tasks in state: ${uiState.tasks.size}")
-            uiState.tasks.forEachIndexed { index, task ->
+            Log.d("TodayTasksScreen", "All tasks in state: ${view.tasks.size}")
+            view.tasks.forEachIndexed { index, task ->
                 Log.d("TodayTasksScreen", "  State[$index]: ${task.title} on ${task.date}")
             }
             filteredTasks.forEachIndexed { index, task ->
@@ -197,22 +210,17 @@ fun TodayTasksScreen(
                     items = filteredTasks,
                     key = { task -> task.id }
                 ) { task ->
-                    val project = uiState.projects.find { it.id == task.projectId }
+                    val project = view.projects.find { it.id == task.projectId }
                     val projectName = project?.name ?: "Unknown Project"
                     TaskCard(
                         task = task,
                         projectName = projectName,
                         onClick = {
-                            val nextStatus = when (task.status) {
-                                TaskStatus.TODO -> TaskStatus.IN_PROGRESS
-                                TaskStatus.IN_PROGRESS -> TaskStatus.DONE
-                                TaskStatus.DONE -> TaskStatus.TODO
-                            }
-                            viewModel.updateTaskStatus(task.id, nextStatus)
+                            presenter.onTaskClicked(task)
                         }
                     )
                 }
-                
+
                 if (filteredTasks.isEmpty()) {
                     item {
                         Box(
@@ -231,6 +239,48 @@ fun TodayTasksScreen(
                 }
             }
         }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+class TodayTasksViewImpl(
+    private val presenter: TodayTasksPresenter,
+    private val onNavigateToAddProject: () -> Unit
+) : TodayTasksView {
+
+    var tasks by mutableStateOf<List<Task>>(emptyList())
+    var projects by mutableStateOf<List<Project>>(emptyList())
+    var selectedDate by mutableStateOf(LocalDate.now())
+    var selectedFilter by mutableStateOf(TaskFilterType.ALL)
+
+    override fun showTasks(tasks: List<Task>) {
+        this.tasks = tasks
+    }
+
+    override fun showProjects(projects: List<Project>) {
+        this.projects = projects
+    }
+
+    override fun showSelectedDate(date: LocalDate) {
+        selectedDate = date
+    }
+
+    override fun showSelectedFilter(filter: TaskFilterType) {
+        selectedFilter = filter
+    }
+
+    override fun updateTaskStatus(taskId: String, newStatus: TaskStatus) {
+        tasks = tasks.map { task ->
+            if (task.id == taskId) task.copy(status = newStatus) else task
+        }
+    }
+
+    override fun navigateToAddProject() {
+        onNavigateToAddProject()
+    }
+
+    override fun showNoTasksMessage() {
+        // Message is shown in the UI when filteredTasks is empty
     }
 }
 
@@ -292,8 +342,9 @@ fun BottomNavigationBar(
 @Preview
 @Composable
 fun TodayTasksScreenPreview() {
+    val presenter = TodayTasksPresenterImpl()
     TodayTasksScreen(
-        viewModel = TaskManagementViewModel(),
+        presenter = presenter,
         onAddTask = {},
         onScreenVisible = {}
     )
