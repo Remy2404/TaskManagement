@@ -1,7 +1,6 @@
 package com.myphka.taskmanagement.ui.screen
 
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,7 +23,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DatePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
@@ -36,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Button
@@ -50,51 +49,38 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.myphka.taskmanagement.model.Project
-import com.myphka.taskmanagement.model.Task
-import com.myphka.taskmanagement.model.TaskStatus
 import com.myphka.taskmanagement.ui.theme.BackgroundLavender
 import com.myphka.taskmanagement.ui.theme.NeutralGray
 import com.myphka.taskmanagement.ui.theme.PrimaryBrand
 import com.myphka.taskmanagement.ui.theme.TextDark
 import com.myphka.taskmanagement.ui.theme.TextMuted
-import com.myphka.taskmanagement.viewmodel.TaskManagementViewModel
+import com.myphka.taskmanagement.presenter.AddProjectPresenter
+import com.myphka.taskmanagement.presenter.AddProjectView
+import com.myphka.taskmanagement.presenter.TodayTasksPresenterImpl
+import com.myphka.taskmanagement.presenter.AddProjectPresenterImpl
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddProjectScreen(
-    viewModel: TaskManagementViewModel,
-    onBackClick: () -> Unit = {}
+    presenter: AddProjectPresenter,
+    onBackClick: () -> Unit = {},
+    viewModel: AddProjectPresenterImpl
 ) {
+    val view = remember { AddProjectViewImpl(presenter, onBackClick) }
+
+    // Attach view to presenter
+    LaunchedEffect(presenter) {
+        presenter.attachView(view)
+        presenter.onViewCreated()
+    }
+
     // Handle system back button
     BackHandler {
-        onBackClick()
+        presenter.onBackClicked()
     }
-    var selectedTaskGroup by remember { mutableStateOf("Work") }
-    var projectName by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var startDate by remember { mutableStateOf(LocalDate.now()) }
-    var endDate by remember { mutableStateOf(LocalDate.now().plusMonths(1)) }
-    var showTaskGroupDropdown by remember { mutableStateOf(false) }
-    var showStartDatePicker by remember { mutableStateOf(false) }
-    var showEndDatePicker by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    
-    // Task title management
-    var taskTitles by remember { 
-        mutableStateOf(listOf("Initial Planning", "Setup Development Environment")) 
-    }
-    var newTaskTitle by remember { mutableStateOf("") }
-
-    val taskGroups = listOf("Work", "Personal", "Shopping", "Health")
-    
-    // Log for debugging
-    val TAG = "AddProjectScreen"
 
     Column(
         modifier = Modifier
@@ -154,28 +140,28 @@ fun AddProjectScreen(
                                     color = Color.White,
                                     shape = RoundedCornerShape(16.dp)
                                 )
-                                .clickable { showTaskGroupDropdown = !showTaskGroupDropdown }
+                                .clickable { view.showTaskGroupDropdown = !view.showTaskGroupDropdown }
                                 .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = selectedTaskGroup,
+                                text = view.selectedTaskGroup,
                                 fontSize = 16.sp,
                                 color = TextDark,
                                 modifier = Modifier.weight(1f)
                             )
                         }
                         DropdownMenu(
-                            expanded = showTaskGroupDropdown,
-                            onDismissRequest = { showTaskGroupDropdown = false },
+                            expanded = view.showTaskGroupDropdown,
+                            onDismissRequest = { view.showTaskGroupDropdown = false },
                             modifier = Modifier.fillMaxWidth(0.9f)
                         ) {
-                            taskGroups.forEach { group ->
+                            view.taskGroups.forEach { group ->
                                 DropdownMenuItem(
                                     text = { Text(group) },
                                     onClick = {
-                                        selectedTaskGroup = group
-                                        showTaskGroupDropdown = false
+                                        presenter.onTaskGroupSelected(group)
+                                        view.showTaskGroupDropdown = false
                                     }
                                 )
                             }
@@ -188,10 +174,9 @@ fun AddProjectScreen(
             item {
                 FormField(label = "Project Name") {
                     OutlinedTextField(
-                        value = projectName,
-                        onValueChange = { 
-                            projectName = it
-                            errorMessage = null
+                        value = view.projectName,
+                        onValueChange = {
+                            presenter.onProjectNameChanged(it)
                         },
                         placeholder = {
                             Text(
@@ -210,8 +195,8 @@ fun AddProjectScreen(
             item {
                 FormField(label = "Description") {
                     OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
+                        value = view.description,
+                        onValueChange = { presenter.onDescriptionChanged(it) },
                         placeholder = {
                             Text(
                                 "This application is designed for super-shops…",
@@ -237,7 +222,7 @@ fun AddProjectScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         FormField(label = "Start Date") {
                             Button(
-                                onClick = { showStartDatePicker = true },
+                                onClick = { view.showStartDatePicker = true },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color.White,
@@ -246,7 +231,7 @@ fun AddProjectScreen(
                                 shape = RoundedCornerShape(16.dp)
                             ) {
                                 Text(
-                                    text = startDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
+                                    text = view.startDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
                                     fontSize = 16.sp
                                 )
                             }
@@ -255,7 +240,7 @@ fun AddProjectScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         FormField(label = "End Date") {
                             Button(
-                                onClick = { showEndDatePicker = true },
+                                onClick = { view.showEndDatePicker = true },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color.White,
@@ -264,7 +249,7 @@ fun AddProjectScreen(
                                 shape = RoundedCornerShape(16.dp)
                             ) {
                                 Text(
-                                    text = endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
+                                    text = view.endDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
                                     fontSize = 16.sp
                                 )
                             }
@@ -346,7 +331,7 @@ fun AddProjectScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // Display existing task titles
-                        taskTitles.forEachIndexed { index, title ->
+                        view.taskTitles.forEachIndexed { index, title ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -360,9 +345,7 @@ fun AddProjectScreen(
                                 )
                                 IconButton(
                                     onClick = {
-                                        taskTitles = taskTitles.toMutableList().apply {
-                                            removeAt(index)
-                                        }
+                                        presenter.onRemoveTaskTitle(index)
                                     },
                                     modifier = Modifier.size(32.dp)
                                 ) {
@@ -383,8 +366,8 @@ fun AddProjectScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedTextField(
-                                value = newTaskTitle,
-                                onValueChange = { newTaskTitle = it },
+                                value = view.newTaskTitle,
+                                onValueChange = { view.newTaskTitle = it },
                                 placeholder = {
                                     Text(
                                         "Enter task title...",
@@ -398,13 +381,13 @@ fun AddProjectScreen(
                             )
                             Button(
                                 onClick = {
-                                    val trimmedTitle = newTaskTitle.trim()
-                                    if (trimmedTitle.isNotEmpty() && !taskTitles.contains(trimmedTitle)) {
-                                        taskTitles = taskTitles + trimmedTitle
-                                        newTaskTitle = ""
+                                    val trimmedTitle = view.newTaskTitle.trim()
+                                    if (trimmedTitle.isNotEmpty() && !view.taskTitles.contains(trimmedTitle)) {
+                                        presenter.onAddTaskTitle(trimmedTitle)
+                                        view.newTaskTitle = ""
                                     }
                                 },
-                                enabled = newTaskTitle.trim().isNotEmpty(),
+                                enabled = view.newTaskTitle.trim().isNotEmpty(),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = PrimaryBrand
                                 ),
@@ -420,7 +403,7 @@ fun AddProjectScreen(
                             }
                         }
                         
-                        if (taskTitles.isEmpty()) {
+                        if (view.taskTitles.isEmpty()) {
                             Text(
                                 text = "Add at least one task title",
                                 color = Color.Gray,
@@ -437,7 +420,7 @@ fun AddProjectScreen(
             }
 
             // Error Message
-            errorMessage?.let { error ->
+            view.errorMessage?.let { error ->
                 item {
                     Text(
                         text = error,
@@ -454,63 +437,7 @@ fun AddProjectScreen(
         // Add Project Button
         Button(
             onClick = {
-                val trimmedProjectName = projectName.trim()
-                if (trimmedProjectName.isEmpty()) {
-                    errorMessage = "Project name cannot be empty"
-                    Log.e(TAG, "Project name is empty")
-                    return@Button
-                }
-                
-                if (taskTitles.isEmpty()) {
-                    errorMessage = "Please add at least one task title"
-                    Log.e(TAG, "No task titles specified")
-                    return@Button
-                }
-                
-                try {
-                    isLoading = true
-                    Log.d(TAG, "Adding project: $trimmedProjectName")
-                    
-                    val newProject = Project(
-                        name = trimmedProjectName,
-                        description = description.trim(),
-                        taskGroup = selectedTaskGroup,
-                        startDate = startDate,
-                        endDate = endDate
-                    )
-                    
-                    viewModel.addProject(newProject)
-                    Log.d(TAG, "Project added with ID: ${newProject.id}")
-                    
-                    // Add tasks for the new project based on user-defined titles
-                    val taskDate = LocalDate.now()
-                    Log.d(TAG, "Creating ${taskTitles.size} tasks for date: $taskDate")
-                    val dynamicTasks = taskTitles.mapIndexed { index, title ->
-                        Task(
-                            title = title,
-                            subtitle = "Task for $trimmedProjectName project",
-                            scheduledTime = LocalTime.of(9 + index, 0), // Stagger times
-                            status = TaskStatus.TODO,
-                            projectId = newProject.id,
-                            date = taskDate
-                        )
-                    }
-                    dynamicTasks.forEach { task ->
-                        Log.d(TAG, "Adding task: ${task.title} | Date: ${task.date} | Project: ${task.projectId}")
-                        viewModel.addTask(task)
-                        Log.d(TAG, "Task added: ${task.id}")
-                    }
-                    
-                    Log.d(TAG, "Project and sample tasks added successfully, navigating back")
-                    isLoading = false
-                    
-                    // Navigate back after state update
-                    onBackClick()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error adding project: ${e.message}", e)
-                    errorMessage = "Error adding project: ${e.message}"
-                    isLoading = false
-                }
+                presenter.onSaveProject()
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -520,10 +447,10 @@ fun AddProjectScreen(
                 containerColor = PrimaryBrand
             ),
             shape = RoundedCornerShape(16.dp),
-            enabled = !isLoading && projectName.trim().isNotEmpty() && taskTitles.isNotEmpty()
+            enabled = !view.isLoading && view.projectName.trim().isNotEmpty() && view.taskTitles.isNotEmpty()
         ) {
             Text(
-                text = if (isLoading) "Adding..." else "Add Project",
+                text = if (view.isLoading) "Adding..." else "Add Project",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White
@@ -532,27 +459,25 @@ fun AddProjectScreen(
     }
 
     // Start Date Picker Dialog
-    if (showStartDatePicker) {
+    if (view.showStartDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = startDate.toEpochDay() * 24 * 60 * 60 * 1000
+            initialSelectedDateMillis = view.startDate.toEpochDay() * 24 * 60 * 60 * 1000
         )
         DatePickerDialog(
-            onDismissRequest = { showStartDatePicker = false },
+            onDismissRequest = { view.showStartDatePicker = false },
             confirmButton = {
                 Button(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
                         val selectedDate = LocalDate.ofEpochDay(millis / (24 * 60 * 60 * 1000))
-                        if (selectedDate <= endDate) {
-                            startDate = selectedDate
-                        }
+                        presenter.onStartDateSelected(selectedDate)
                     }
-                    showStartDatePicker = false
+                    view.showStartDatePicker = false
                 }) {
                     Text("OK")
                 }
             },
             dismissButton = {
-                Button(onClick = { showStartDatePicker = false }) {
+                Button(onClick = { view.showStartDatePicker = false }) {
                     Text("Cancel")
                 }
             }
@@ -562,33 +487,92 @@ fun AddProjectScreen(
     }
 
     // End Date Picker Dialog
-    if (showEndDatePicker) {
+    if (view.showEndDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = endDate.toEpochDay() * 24 * 60 * 60 * 1000
+            initialSelectedDateMillis = view.endDate.toEpochDay() * 24 * 60 * 60 * 1000
         )
         DatePickerDialog(
-            onDismissRequest = { showEndDatePicker = false },
+            onDismissRequest = { view.showEndDatePicker = false },
             confirmButton = {
                 androidx.compose.material3.Button(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
                         val selectedDate = LocalDate.ofEpochDay(millis / (24 * 60 * 60 * 1000))
-                        if (selectedDate >= startDate) {
-                            endDate = selectedDate
-                        }
+                        presenter.onEndDateSelected(selectedDate)
                     }
-                    showEndDatePicker = false
+                    view.showEndDatePicker = false
                 }) {
                     Text("OK")
                 }
             },
             dismissButton = {
-                Button(onClick = { showEndDatePicker = false }) {
+                Button(onClick = { view.showEndDatePicker = false }) {
                     Text("Cancel")
                 }
             }
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+class AddProjectViewImpl(
+    private val presenter: AddProjectPresenter,
+    private val onBackClick: () -> Unit
+) : AddProjectView {
+
+    var taskGroups by mutableStateOf(listOf("Work", "Personal", "Shopping", "Health"))
+    var selectedTaskGroup by mutableStateOf("Work")
+    var projectName by mutableStateOf("")
+    var description by mutableStateOf("")
+    var startDate by mutableStateOf(LocalDate.now())
+    var endDate by mutableStateOf(LocalDate.now().plusMonths(1))
+    var taskTitles by mutableStateOf(listOf("Initial Planning", "Setup Development Environment"))
+    var newTaskTitle by mutableStateOf("")
+    var showTaskGroupDropdown by mutableStateOf(false)
+    var showStartDatePicker by mutableStateOf(false)
+    var showEndDatePicker by mutableStateOf(false)
+    var isLoading by mutableStateOf(false)
+    var errorMessage by mutableStateOf<String?>(null)
+
+    override fun showTaskGroups(groups: List<String>) {
+        taskGroups = groups
+    }
+
+    override fun showSelectedTaskGroup(group: String) {
+        selectedTaskGroup = group
+    }
+
+    override fun showProjectName(name: String) {
+        projectName = name
+    }
+
+    override fun showDescription(description: String) {
+        this.description = description
+    }
+
+    override fun showStartDate(date: LocalDate) {
+        startDate = date
+    }
+
+    override fun showEndDate(date: LocalDate) {
+        endDate = date
+    }
+
+    override fun showTaskTitles(titles: List<String>) {
+        taskTitles = titles
+    }
+
+    override fun showLoading(isLoading: Boolean) {
+        this.isLoading = isLoading
+    }
+
+    override fun showError(message: String?) {
+        errorMessage = message
+    }
+
+    override fun navigateBack() {
+        onBackClick()
     }
 }
 
@@ -615,8 +599,9 @@ fun FormField(
 @Preview
 @Composable
 fun AddProjectScreenPreview() {
+    val todayTasksPresenter = TodayTasksPresenterImpl()
+    val presenter = AddProjectPresenterImpl(todayTasksPresenter)
     AddProjectScreen(
-        viewModel = TaskManagementViewModel(),
-        onBackClick = {}
+        presenter = presenter,
     )
 }

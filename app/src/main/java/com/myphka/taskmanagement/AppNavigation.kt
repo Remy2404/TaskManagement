@@ -9,7 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.myphka.taskmanagement.ui.screen.TodayTasksScreen
 import com.myphka.taskmanagement.ui.screen.AddProjectScreen
-import com.myphka.taskmanagement.viewmodel.TaskManagementViewModel
+import com.myphka.taskmanagement.presenter.TodayTasksPresenterImpl
+import com.myphka.taskmanagement.presenter.AddProjectPresenterImpl
 
 enum class Screen {
     TODAY_TASKS, ADD_PROJECT
@@ -17,13 +18,17 @@ enum class Screen {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun AppNavigation(viewModel: TaskManagementViewModel) {
+fun AppNavigation() {
     var currentScreen by remember { mutableStateOf(Screen.TODAY_TASKS) }
+
+    // Create presenters
+    val todayTasksPresenter = remember { TodayTasksPresenterImpl() }
+    val addProjectPresenter = remember { AddProjectPresenterImpl(todayTasksPresenter) }
 
     when (currentScreen) {
         Screen.TODAY_TASKS -> {
             TodayTasksScreen(
-                viewModel = viewModel,
+                presenter = todayTasksPresenter,
                 onNavigateToAddProject = {
                     currentScreen = Screen.ADD_PROJECT
                 },
@@ -34,7 +39,8 @@ fun AppNavigation(viewModel: TaskManagementViewModel) {
         }
         Screen.ADD_PROJECT -> {
             AddProjectScreen(
-                viewModel = viewModel,
+                presenter = addProjectPresenter,
+                viewModel = addProjectPresenter,
                 onBackClick = {
                     currentScreen = Screen.TODAY_TASKS
                 }
