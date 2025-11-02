@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -46,6 +47,7 @@ import com.myphka.taskmanagement.ui.theme.TextDark
 import com.myphka.taskmanagement.viewmodel.TaskManagementViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import android.util.Log
 import androidx.compose.ui.text.style.TextAlign
@@ -67,7 +69,9 @@ fun TodayTasksScreen(
     }
     
     val uiState by viewModel.uiState.collectAsState()
-    
+
+    val listState = rememberLazyListState()
+
     // Debug logging
     Log.d("TodayTasksScreen", "Screen recomposed | Filter: ${uiState.selectedFilter} | Date: ${uiState.selectedDate} | Total tasks: ${uiState.tasks.size}")
 
@@ -155,12 +159,21 @@ fun TodayTasksScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Tasks List - directly filter from uiState, ensuring reactivity
-            val filteredTasks = uiState.tasks.filter { task ->
-                task.date == uiState.selectedDate && when (uiState.selectedFilter) {
-                    TaskFilterType.ALL -> true
-                    TaskFilterType.TODO -> task.status == TaskStatus.TODO
-                    TaskFilterType.IN_PROGRESS -> task.status == TaskStatus.IN_PROGRESS
-                    TaskFilterType.DONE -> task.status == TaskStatus.DONE
+            val filteredTasks = remember(uiState.tasks, uiState.selectedDate, uiState.selectedFilter) {
+                uiState.tasks.filter { task ->
+                    task.date == uiState.selectedDate && when (uiState.selectedFilter) {
+                        TaskFilterType.ALL -> true
+                        TaskFilterType.TODO -> task.status == TaskStatus.TODO
+                        TaskFilterType.IN_PROGRESS -> task.status == TaskStatus.IN_PROGRESS
+                        TaskFilterType.DONE -> task.status == TaskStatus.DONE
+                    }
+                }
+            }
+
+            // Scroll to bottom when new tasks are added
+            LaunchedEffect(filteredTasks.size) {
+                if (filteredTasks.isNotEmpty()) {
+                    listState.animateScrollToItem(filteredTasks.size - 1)
                 }
             }
 
@@ -174,6 +187,7 @@ fun TodayTasksScreen(
             }
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
@@ -183,8 +197,11 @@ fun TodayTasksScreen(
                     items = filteredTasks,
                     key = { task -> task.id }
                 ) { task ->
+                    val project = uiState.projects.find { it.id == task.projectId }
+                    val projectName = project?.name ?: "Unknown Project"
                     TaskCard(
                         task = task,
+                        projectName = projectName,
                         onClick = {
                             val nextStatus = when (task.status) {
                                 TaskStatus.TODO -> TaskStatus.IN_PROGRESS

@@ -33,6 +33,7 @@ import com.myphka.taskmanagement.ui.theme.TextMuted
 @Composable
 fun TaskCard(
     task: Task,
+    projectName: String = "",
     onClick: () -> Unit = {}
 ) {
     Box(
@@ -70,6 +71,14 @@ fun TaskCard(
                         fontWeight = FontWeight.Normal,
                         color = TextMuted
                     )
+                    if (projectName.isNotEmpty()) {
+                        Text(
+                            text = "Project: $projectName",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = TextMuted
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.weight(0.1f))
                 StatusChip(task.status)
@@ -112,6 +121,7 @@ fun PreTaskCard() {
             projectId = "project-1",
             date = java.time.LocalDate.now(),
             scheduledTime = java.time.LocalTime.now()
-        )
+        ),
+        projectName = "Sample Project"
     )
 }

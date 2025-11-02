@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -43,6 +44,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -82,6 +84,12 @@ fun AddProjectScreen(
     var showEndDatePicker by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    
+    // Task title management
+    var taskTitles by remember { 
+        mutableStateOf(listOf("Initial Planning", "Setup Development Environment")) 
+    }
+    var newTaskTitle by remember { mutableStateOf("") }
 
     val taskGroups = listOf("Work", "Personal", "Shopping", "Health")
     
@@ -183,7 +191,7 @@ fun AddProjectScreen(
                         value = projectName,
                         onValueChange = { 
                             projectName = it
-                            errorMessage = null // Clear error when user starts typing
+                            errorMessage = null
                         },
                         placeholder = {
                             Text(
@@ -324,6 +332,106 @@ fun AddProjectScreen(
                 }
             }
 
+            // Task Titles Management
+            item {
+                FormField(label = "Task Titles") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = Color.White,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Display existing task titles
+                        taskTitles.forEachIndexed { index, title ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "• $title",
+                                    fontSize = 14.sp,
+                                    color = TextDark,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = {
+                                        taskTitles = taskTitles.toMutableList().apply {
+                                            removeAt(index)
+                                        }
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = "Remove task",
+                                        tint = Color.Red,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Add new task title section
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = newTaskTitle,
+                                onValueChange = { newTaskTitle = it },
+                                placeholder = {
+                                    Text(
+                                        "Enter task title...",
+                                        color = TextMuted,
+                                        fontSize = 14.sp
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                singleLine = true
+                            )
+                            Button(
+                                onClick = {
+                                    val trimmedTitle = newTaskTitle.trim()
+                                    if (trimmedTitle.isNotEmpty() && !taskTitles.contains(trimmedTitle)) {
+                                        taskTitles = taskTitles + trimmedTitle
+                                        newTaskTitle = ""
+                                    }
+                                },
+                                enabled = newTaskTitle.trim().isNotEmpty(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = PrimaryBrand
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.height(56.dp)
+                            ) {
+                                Text(
+                                    text = "Add",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                        
+                        if (taskTitles.isEmpty()) {
+                            Text(
+                                text = "Add at least one task title",
+                                color = Color.Gray,
+                                fontSize = 12.sp,
+                                fontStyle = FontStyle.Italic
+                            )
+                        }
+                    }
+                }
+            }
+
             item {
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -353,6 +461,12 @@ fun AddProjectScreen(
                     return@Button
                 }
                 
+                if (taskTitles.isEmpty()) {
+                    errorMessage = "Please add at least one task title"
+                    Log.e(TAG, "No task titles specified")
+                    return@Button
+                }
+                
                 try {
                     isLoading = true
                     Log.d(TAG, "Adding project: $trimmedProjectName")
@@ -368,28 +482,20 @@ fun AddProjectScreen(
                     viewModel.addProject(newProject)
                     Log.d(TAG, "Project added with ID: ${newProject.id}")
                     
-                    // Add sample tasks for the new project
+                    // Add tasks for the new project based on user-defined titles
                     val taskDate = LocalDate.now()
-                    Log.d(TAG, "Creating tasks for date: $taskDate")
-                    val sampleTasks = listOf(
+                    Log.d(TAG, "Creating ${taskTitles.size} tasks for date: $taskDate")
+                    val dynamicTasks = taskTitles.mapIndexed { index, title ->
                         Task(
-                            title = "Initial Planning",
-                            subtitle = "Plan the project scope and requirements",
-                            scheduledTime = LocalTime.of(9, 0),
-                            status = TaskStatus.TODO,
-                            projectId = newProject.id,
-                            date = taskDate
-                        ),
-                        Task(
-                            title = "Setup Development Environment",
-                            subtitle = "Configure tools and workspace",
-                            scheduledTime = LocalTime.of(10, 0),
+                            title = title,
+                            subtitle = "Task for $trimmedProjectName project",
+                            scheduledTime = LocalTime.of(9 + index, 0), // Stagger times
                             status = TaskStatus.TODO,
                             projectId = newProject.id,
                             date = taskDate
                         )
-                    )
-                    sampleTasks.forEach { task ->
+                    }
+                    dynamicTasks.forEach { task ->
                         Log.d(TAG, "Adding task: ${task.title} | Date: ${task.date} | Project: ${task.projectId}")
                         viewModel.addTask(task)
                         Log.d(TAG, "Task added: ${task.id}")
@@ -414,7 +520,7 @@ fun AddProjectScreen(
                 containerColor = PrimaryBrand
             ),
             shape = RoundedCornerShape(16.dp),
-            enabled = !isLoading && projectName.trim().isNotEmpty()
+            enabled = !isLoading && projectName.trim().isNotEmpty() && taskTitles.isNotEmpty()
         ) {
             Text(
                 text = if (isLoading) "Adding..." else "Add Project",

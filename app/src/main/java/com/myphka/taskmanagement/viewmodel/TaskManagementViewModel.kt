@@ -1,6 +1,8 @@
 package com.myphka.taskmanagement.viewmodel
 
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,8 +15,11 @@ import com.myphka.taskmanagement.model.Project
 import java.time.LocalDate
 import java.time.LocalTime
 
+@RequiresApi(Build.VERSION_CODES.O)
 class TaskManagementViewModel : ViewModel() {
+    @RequiresApi(Build.VERSION_CODES.O)
     private val _uiState = MutableStateFlow(AppState())
+    @RequiresApi(Build.VERSION_CODES.O)
     val uiState: StateFlow<AppState> = _uiState.asStateFlow()
 
     companion object {
@@ -26,6 +31,7 @@ class TaskManagementViewModel : ViewModel() {
         loadSampleData()
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun loadSampleData() {
         val today = LocalDate.now()
         val sampleTasks = listOf(
@@ -97,16 +103,19 @@ class TaskManagementViewModel : ViewModel() {
         Log.d(TAG, "Sample data loaded: ${sampleTasks.size} tasks, ${sampleProjects.size} projects")
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun selectDate(date: LocalDate) {
         _uiState.value = _uiState.value.copy(selectedDate = date)
         Log.d(TAG, "Date selected: $date")
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun selectFilter(filter: TaskFilterType) {
         _uiState.value = _uiState.value.copy(selectedFilter = filter)
         Log.d(TAG, "Filter selected: $filter")
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun addTask(task: Task) {
         val updatedTasks = _uiState.value.tasks + task
         _uiState.value = _uiState.value.copy(tasks = updatedTasks)
@@ -114,6 +123,7 @@ class TaskManagementViewModel : ViewModel() {
         Log.d(TAG, "Total tasks now: ${updatedTasks.size}")
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun addProject(project: Project) {
         val updatedProjects = _uiState.value.projects + project
         _uiState.value = _uiState.value.copy(projects = updatedProjects)
@@ -121,6 +131,7 @@ class TaskManagementViewModel : ViewModel() {
         Log.d(TAG, "Total projects now: ${updatedProjects.size}")
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun updateTaskStatus(taskId: String, newStatus: TaskStatus) {
         val updatedTasks = _uiState.value.tasks.map { task ->
             if (task.id == taskId) task.copy(status = newStatus) else task
@@ -129,6 +140,7 @@ class TaskManagementViewModel : ViewModel() {
         Log.d(TAG, "Task status updated: $taskId -> $newStatus")
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun getFilteredTasks(state: AppState = _uiState.value): List<Task> {
         val filtered = state.tasks.filter { task ->
             task.date == state.selectedDate && when (state.selectedFilter) {
