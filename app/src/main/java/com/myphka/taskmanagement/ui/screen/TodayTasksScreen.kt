@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,6 +48,10 @@ import com.myphka.taskmanagement.ui.theme.TextDark
 import com.myphka.taskmanagement.presenter.TodayTasksPresenter
 import com.myphka.taskmanagement.presenter.TodayTasksView
 import com.myphka.taskmanagement.presenter.TodayTasksPresenterImpl
+import com.myphka.taskmanagement.ui.controller.TodayTasksController
+import com.myphka.taskmanagement.ui.controller.TodayTasksControllerFactory
+import com.myphka.taskmanagement.ui.controller.TodayTasksControllerImpl
+import com.myphka.taskmanagement.ui.controller.UiEvent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -347,5 +352,235 @@ fun TodayTasksScreenPreview() {
         presenter = presenter,
         onAddTask = {},
         onScreenVisible = {}
+    )
+}
+
+// ============================================================================
+// MVC Pattern - Controller-based TodayTasksScreen
+// ============================================================================
+
+/**
+ * TodayTasksScreen using MVC Controller pattern.
+ * This is the new preferred way to use this screen.
+ * 
+ * @param controller The TodayTasksController instance
+ * @param onNavigateToAddProject Callback for navigating to add project screen
+ * @param onAddTask Callback for adding a task
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun TodayTasksScreen(
+    controller: TodayTasksController,
+    onNavigateToAddProject: () -> Unit = {},
+    onAddTask: () -> Unit = {}
+) {
+    val state by controller.state.collectAsState()
+    val listState = rememberLazyListState()
+
+    // Handle one-shot events
+    LaunchedEffect(Unit) {
+        controller.events.collect { event ->
+            when (event) {
+                is UiEvent.NavigateToAddProject -> onNavigateToAddProject()
+                is UiEvent.NavigateToAddTask -> onAddTask()
+                is UiEvent.ShowError -> Log.e("TodayTasksScreen", "Error: ${event.message}")
+                is UiEvent.ShowMessage -> Log.d("TodayTasksScreen", "Message: ${event.message}")
+            }
+        }
+    }
+
+    // Debug logging
+    Log.d("TodayTasksScreen", "Controller Screen recomposed | Filter: ${state.selectedFilter} | Date: ${state.selectedDate} | Total tasks: ${state.tasks.size}")
+
+    // Calculate filtered tasks
+    val filteredTasks = remember(state.tasks, state.selectedDate, state.selectedFilter) {
+        state.tasks.filter { task ->
+            task.date == state.selectedDate && when (state.selectedFilter) {
+                TaskFilterType.ALL -> true
+                TaskFilterType.TODO -> task.status == TaskStatus.TODO
+                TaskFilterType.IN_PROGRESS -> task.status == TaskStatus.IN_PROGRESS
+                TaskFilterType.DONE -> task.status == TaskStatus.DONE
+            }
+        }
+    }
+
+    // Scroll to bottom when new tasks are added
+    LaunchedEffect(filteredTasks.size) {
+        if (filteredTasks.isNotEmpty()) {
+            listState.animateScrollToItem(filteredTasks.size - 1)
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BackgroundLavender),
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { controller.onAddProjectClicked() },
+                containerColor = PrimaryBrand,
+                shape = CircleShape
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "Add Task",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        },
+        floatingActionButtonPosition = FabPosition.Center,
+        bottomBar = {
+            BottomNavigationBar(
+                onNavigateToAddProject = { controller.onAddProjectClicked() }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BackgroundLavender)
+                .padding(innerPadding)
+        ) {
+            // Header
+            Text(
+                text = "Today's Tasks",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextDark,
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+
+            // Date Selector
+            DateSelector(
+                selectedDate = state.selectedDate,
+                onDateSelected = { date ->
+                    controller.selectDate(date)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Filter Tabs
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                FilterTab(
+                    modifier = Modifier.weight(1f),
+                    label = "All",
+                    isSelected = state.selectedFilter == TaskFilterType.ALL,
+                    onClick = { controller.selectFilter(TaskFilterType.ALL) }
+                )
+                FilterTab(
+                    modifier = Modifier.weight(1f),
+                    label = "To Do",
+                    isSelected = state.selectedFilter == TaskFilterType.TODO,
+                    onClick = { controller.selectFilter(TaskFilterType.TODO) }
+                )
+                FilterTab(
+                    modifier = Modifier.weight(1f),
+                    label = "In Progress",
+                    isSelected = state.selectedFilter == TaskFilterType.IN_PROGRESS,
+                    onClick = { controller.selectFilter(TaskFilterType.IN_PROGRESS) }
+                )
+                FilterTab(
+                    modifier = Modifier.weight(1f),
+                    label = "Done",
+                    isSelected = state.selectedFilter == TaskFilterType.DONE,
+                    onClick = { controller.selectFilter(TaskFilterType.DONE) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Log.d("TodayTasksScreen", "Rendering ${filteredTasks.size} tasks in LazyColumn (Controller)")
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(
+                    items = filteredTasks,
+                    key = { task -> task.id }
+                ) { task ->
+                    val project = state.projects.find { it.id == task.projectId }
+                    val projectName = project?.name ?: "Unknown Project"
+                    TaskCard(
+                        task = task,
+                        projectName = projectName,
+                        onClick = {
+                            controller.toggleTaskStatus(task.id)
+                        }
+                    )
+                }
+
+                if (filteredTasks.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(150.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No tasks for this filter",
+                                fontSize = 16.sp,
+                                color = NeutralGray
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Backward-compatible overload that creates a controller from a presenter.
+ * Use this during migration to keep existing presenter-based code working.
+ * 
+ * @param presenter The existing TodayTasksPresenterImpl
+ * @param onNavigateToAddProject Callback for navigating to add project screen  
+ * @param onAddTask Callback for adding a task
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun TodayTasksScreenWithController(
+    presenter: TodayTasksPresenterImpl,
+    onNavigateToAddProject: () -> Unit = {},
+    onAddTask: () -> Unit = {}
+) {
+    val controller = remember { TodayTasksControllerFactory.createFromPresenter(presenter) }
+    
+    // Cancel controller when composable leaves composition
+    DisposableEffect(Unit) {
+        onDispose {
+            controller.cancel()
+        }
+    }
+    
+    TodayTasksScreen(
+        controller = controller,
+        onNavigateToAddProject = onNavigateToAddProject,
+        onAddTask = onAddTask
+    )
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Preview
+@Composable
+fun TodayTasksScreenControllerPreview() {
+    val controller = TodayTasksControllerImpl()
+    TodayTasksScreen(
+        controller = controller,
+        onAddTask = {}
     )
 }
