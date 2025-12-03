@@ -30,12 +30,12 @@ import java.time.LocalDate
  * This allows gradual migration from MVP pattern to MVC pattern.
  * 
  * @param presenter The existing presenter to adapt
- * @param scope CoroutineScope for async operations
+ * @param scope CoroutineScope for async operations. Should use Dispatchers.Main for UI updates.
  */
 @RequiresApi(Build.VERSION_CODES.O)
 class PresenterControllerAdapter(
     private val presenter: TodayTasksPresenterImpl,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 ) : TodayTasksController {
 
     companion object {

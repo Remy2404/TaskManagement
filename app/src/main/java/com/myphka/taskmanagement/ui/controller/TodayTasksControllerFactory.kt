@@ -18,10 +18,11 @@ object TodayTasksControllerFactory {
      * Creates a new TodayTasksControllerImpl instance.
      * 
      * @param scope Optional coroutine scope. If not provided, a default scope is created.
+     *              Should use Dispatchers.Main for UI state updates.
      * @return A new TodayTasksController instance
      */
     fun create(
-        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     ): TodayTasksController {
         return TodayTasksControllerImpl(scope)
     }
@@ -33,11 +34,12 @@ object TodayTasksControllerFactory {
      * 
      * @param presenter The existing TodayTasksPresenterImpl to adapt
      * @param scope Optional coroutine scope. If not provided, a default scope is created.
+     *              Should use Dispatchers.Main for UI state updates.
      * @return A TodayTasksController that wraps the presenter
      */
     fun createFromPresenter(
         presenter: TodayTasksPresenterImpl,
-        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     ): TodayTasksController {
         return PresenterControllerAdapter(presenter, scope)
     }

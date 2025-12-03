@@ -29,10 +29,11 @@ import java.time.LocalTime
  *
  * @param scope CoroutineScope for async operations. Caller is responsible for cancellation
  *              if a custom scope is provided. Otherwise, call [cancel] when done.
+ *              Note: The scope should use Dispatchers.Main for UI state updates.
  */
 @RequiresApi(Build.VERSION_CODES.O)
 class TodayTasksControllerImpl(
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 ) : TodayTasksController {
 
     companion object {
